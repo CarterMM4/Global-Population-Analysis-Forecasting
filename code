@@ -1,1 +1,107 @@
+# Install and set up Kaggle API
+!pip install -q kaggle
+from google.colab import files
+files.upload()  # Upload your kaggle.json file
+
+# Move kaggle.json to the correct location
+!mkdir -p ~/.kaggle
+!mv kaggle.json ~/.kaggle/
+!chmod 600 ~/.kaggle/kaggle.json
+
+# Download and unzip the World Population dataset
+!kaggle datasets download -d arpitsinghaiml/world-population --force
+!unzip -o world-population.zip
+
+# Import necessary libraries
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Load data and inspect columns
+data = pd.read_csv('countries-table.csv')
+data.columns = [col.strip().replace(" ", "_").lower() for col in data.columns]  # Clean column names
+
+# Identify population columns and reshape data
+population_columns = [col for col in data.columns if 'pop' in col and col != 'netchange']
+melted_data = data.melt(id_vars=['country', 'area'], 
+                        value_vars=population_columns, 
+                        var_name='year', 
+                        value_name='population')
+
+# Extract numeric year from columns like 'pop1980'
+melted_data['year'] = melted_data['year'].str.extract('(\d+)').astype(float)
+melted_data.dropna(subset=['population'], inplace=True)
+
+# Analysis 1: Enhanced Population Growth Trends Plot for Selected Countries
+selected_countries = ['United States', 'India', 'China', 'Brazil', 'Nigeria']
+plot_data = melted_data[melted_data['country'].isin(selected_countries)]
+
+plt.figure(figsize=(14, 8))
+sns.lineplot(data=plot_data, x='year', y='population', hue='country', marker="o")
+plt.title('Population Growth Trends (Selected Countries)')
+plt.xlabel('Year')
+plt.ylabel('Population')
+plt.legend(title='Country')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+# Analysis 2: Top 10 Most Populous Countries in the Latest Year with Annotations
+latest_year = int(melted_data['year'].max())
+top_10_populous = melted_data[melted_data['year'] == latest_year].nlargest(10, 'population')
+
+plt.figure(figsize=(12, 8))
+sns.barplot(x='population', y='country', data=top_10_populous, palette='mako')
+plt.title(f'Top 10 Most Populous Countries in {latest_year}')
+plt.xlabel('Population (in billions)')
+plt.ylabel('Country')
+
+# Add annotation for each bar
+for index, value in enumerate(top_10_populous['population']):
+    plt.text(value, index, f"{value / 1e9:.2f}B", va='center', ha='left', color='black', fontsize=10)
+
+plt.grid(True, axis='x', linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
+
+# Forecasting: Population Growth for Selected Countries with Realistic CAGR Approach
+forecast_countries = ['India', 'China', 'United States', 'Brazil', 'Nigeria']
+forecast_horizon = 10  # Forecast 10 years into the future
+
+plt.figure(figsize=(12, 8))
+for country in forecast_countries:
+    country_data = melted_data[(melted_data['country'] == country) & (melted_data['year'] >= 2000)]
+    
+    # Plot historical population data
+    plt.plot(country_data['year'], country_data['population'], label=f'{country} - Historical', marker='o')
+    
+    # Calculate the CAGR based on the most recent 5 years of data
+    recent_data = country_data.tail(5)
+    start_pop = recent_data['population'].iloc[0]
+    end_pop = recent_data['population'].iloc[-1]
+    years = recent_data['year'].iloc[-1] - recent_data['year'].iloc[0]
+    cagr = ((end_pop / start_pop) ** (1 / years)) - 1  # Compound Annual Growth Rate
+    
+    # Generate forecasted population values
+    last_year = int(country_data['year'].max())
+    last_population = country_data['population'].iloc[-1]
+    forecast_years = np.arange(last_year + 1, last_year + forecast_horizon + 1)
+    forecast_population = [last_population * ((1 + cagr) ** i) for i in range(1, forecast_horizon + 1)]
+    
+    # Plot forecasted data with confidence interval
+    plt.plot(forecast_years, forecast_population, label=f'{country} - Forecast', linestyle='--', marker='o')
+    plt.fill_between(forecast_years, 
+                     [pop * 0.97 for pop in forecast_population], 
+                     [pop * 1.03 for pop in forecast_population], 
+                     color='gray', alpha=0.2)
+
+# Customize plot appearance
+plt.title('Population Forecast (Next 10 Years) for Selected Countries')
+plt.xlabel('Year')
+plt.ylabel('Population')
+plt.legend()
+plt.grid(True, linestyle='--', alpha=0.7)
+plt.tight_layout()
+plt.show()
 
